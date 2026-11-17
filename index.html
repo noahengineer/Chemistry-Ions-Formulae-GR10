@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flashcards</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#070b14; --panel:#0f1626; --panel2:#141d31; --line:#22304d;
+    --text:#e7ecf7; --muted:#8a97b3; --accent:#5ee1ff; --accent2:#a78bfa;
+    --good:#4ade80; --close:#facc15; --bad:#f87171;
+  --glow1:#14204a; --glow2:#2a1650; --font:'Space Grotesk'; --display:'Space Grotesk';
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    font-family:var(--font),system-ui,sans-serif;color:var(--text);
+    background:radial-gradient(1200px 700px at 20% -10%,var(--glow1) 0%,transparent 60%),
+               radial-gradient(900px 600px at 110% 110%,var(--glow2) 0%,transparent 55%),var(--bg);
+    min-height:100vh;overflow-x:hidden;
+  }
+  canvas#bg{position:fixed;inset:0;z-index:0;pointer-events:none}
+  canvas#fx{position:fixed;inset:0;z-index:50;pointer-events:none}
+  .wrap{position:relative;z-index:1;max-width:760px;margin:0 auto;padding:28px 18px 60px}
+
+  header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:22px}
+  h1{font-size:1.35rem;font-weight:700;letter-spacing:-.01em}
+  h1 span{color:var(--accent)}
+  .sub{color:var(--muted);font-size:.85rem;margin-top:2px}
+  .stats{display:flex;gap:10px}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:8px 12px;text-align:center;min-width:64px}
+  .stat b{display:block;font-family:'JetBrains Mono',monospace;font-size:1.1rem}
+  .stat small{color:var(--muted);font-size:.7rem;text-transform:uppercase;letter-spacing:.08em}
+  .stat.streak b{color:var(--close)}
+  .stat.bump{animation:bump .4s ease}
+  @keyframes bump{40%{transform:scale(1.18)}}
+
+  .chips{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px}
+  .chip{background:var(--panel);border:1px solid var(--line);color:var(--muted);padding:7px 14px;border-radius:999px;
+        font:inherit;font-size:.85rem;cursor:pointer;transition:.2s;-webkit-user-select:none;user-select:none}
+  .chip:hover{color:var(--text);border-color:#3a4c75}
+  .chip.on{background:linear-gradient(135deg,color-mix(in srgb,var(--accent) 25%,var(--panel)),color-mix(in srgb,var(--accent2) 25%,var(--panel)));color:var(--text);border-color:var(--accent)}
+
+  .progress{height:6px;background:var(--panel);border-radius:99px;overflow:hidden;margin-bottom:22px;border:1px solid var(--line)}
+  .progress i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--accent2));
+              transition:width .6s cubic-bezier(.2,.8,.2,1);box-shadow:0 0 12px var(--accent)}
+
+  /* card */
+  .scene{perspective:1400px;margin-bottom:18px}
+  .card{position:relative;display:grid;width:100%;min-height:260px;transform-style:preserve-3d;
+        transition:transform .8s cubic-bezier(.3,1.4,.4,1)}
+  .card.flipped{transform:rotateY(180deg)}
+  .card.enter{animation:enter .55s cubic-bezier(.2,.9,.3,1.2)}
+  @keyframes enter{from{opacity:0;transform:translateY(40px) rotateX(-25deg) scale(.92)}to{opacity:1;transform:none}}
+  .card.leave{animation:leave .35s ease-in forwards}
+  .card.flipped.leave{animation:leaveF .35s ease-in forwards}
+  @keyframes leave{to{opacity:0;transform:translateX(-120px) rotate(-8deg)}}
+  @keyframes leaveF{to{opacity:0;transform:rotateY(180deg) translateX(120px) rotate(8deg)}}
+  .face{grid-area:1/1;position:relative;backface-visibility:hidden;-webkit-backface-visibility:hidden;border-radius:22px;
+        padding:30px;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;
+        background:linear-gradient(160deg,var(--panel2),var(--panel));border:1px solid var(--line);
+        box-shadow:0 30px 60px -20px #000a,inset 0 1px 0 #ffffff10;overflow:hidden}
+  .face::before{content:"";position:absolute;inset:-1px;border-radius:22px;padding:1px;
+        background:conic-gradient(from var(--ang,0deg),transparent 0 70%,var(--accent) 80%,var(--accent2) 90%,transparent);
+        -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;
+        animation:spin 6s linear infinite;opacity:.7}
+  @property --ang{syntax:'<angle>';inherits:false;initial-value:0deg}
+  @keyframes spin{to{--ang:360deg}}
+  .back{transform:rotateY(180deg);justify-content:flex-start;align-items:stretch;text-align:left}
+  .tag{font-family:'JetBrains Mono',monospace;font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);
+       background:color-mix(in srgb,var(--accent) 8%,transparent);border:1px solid color-mix(in srgb,var(--accent) 20%,transparent);padding:4px 10px;border-radius:99px;margin-bottom:18px}
+  .term{font-family:var(--display),system-ui,serif;font-size:clamp(2rem,6vw,3.1rem);font-weight:700;letter-spacing:-.02em;line-height:1.05;
+        background:linear-gradient(120deg,#fff 30%,var(--accent) 70%,var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .prompt{color:var(--muted);margin-top:14px;font-size:.95rem}
+  .speaker{font-size:1rem;font-style:italic;color:var(--accent);margin:-4px 0 12px}
+  .themes{font-size:.8rem;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:color-mix(in srgb,var(--accent2) 55%,#fff);margin:-6px 0 14px}
+  .hintline{margin-top:18px;font-family:'JetBrains Mono',monospace;font-size:1rem;color:var(--close);line-height:1.7;max-width:560px}
+  .hintline .w{display:inline-block;margin-right:.55em;opacity:0;transform:translateY(-8px) scale(.8);animation:pop .3s forwards}
+  .hintline .w i{font-style:normal;color:#facc1555;letter-spacing:.08em}
+  .card.shake{animation:shake .5s}
+  .card.flipped.shake{animation:shakeF .5s}
+  @keyframes shake{20%,60%{transform:translateX(-10px)}40%,80%{transform:translateX(10px)}}
+  @keyframes shakeF{20%,60%{transform:rotateY(180deg) translateX(-10px)}40%,80%{transform:rotateY(180deg) translateX(10px)}}
+
+  .qline{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--line)}
+  .qline .label{margin:0}
+  .qline b{font-family:var(--display),system-ui,serif;font-size:1.35rem;font-weight:700;letter-spacing:-.01em;background:linear-gradient(120deg,#fff 30%,var(--accent) 70%,var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .verdict{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+  .ring{--p:0;--c:var(--good);width:58px;height:58px;border-radius:50%;flex:none;
+        background:conic-gradient(var(--c) calc(var(--p)*1%),#ffffff12 0);display:grid;place-items:center;
+        transition:--p 1s ease}
+  @property --p{syntax:'<number>';inherits:false;initial-value:0}
+  .ring span{width:46px;height:46px;border-radius:50%;background:var(--panel);display:grid;place-items:center;
+             font-family:'JetBrains Mono',monospace;font-size:.85rem;font-weight:600}
+  .verdict h3{font-size:1.2rem}
+  .verdict p{color:var(--muted);font-size:.82rem}
+  .label{font-size:.7rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin:10px 0 6px}
+  .answer{font-size:1.08rem;line-height:1.6}
+  .answer .w{display:inline-block;opacity:0;transform:translateY(8px);animation:pop .35s forwards;margin-right:.28em}
+  .answer .hit{color:var(--good)}
+  .answer .miss{color:var(--bad);text-decoration:underline wavy #f8717180;text-underline-offset:4px}
+  .answer .soft{color:var(--muted)}
+  @keyframes pop{to{opacity:1;transform:none}}
+  .yours{font-family:'JetBrains Mono',monospace;font-size:.85rem;color:#c9d3ea;background:#00000033;border:1px solid var(--line);
+         border-radius:10px;padding:10px 12px;white-space:pre-wrap;word-break:break-word}
+  .yours .extra{color:var(--close)}
+  .alt{color:var(--muted);font-size:.82rem;margin-top:6px}
+
+  .inputbox{position:relative}
+  textarea{width:100%;min-height:96px;resize:vertical;background:var(--panel);border:1px solid var(--line);color:var(--text);
+           border-radius:16px;padding:16px 18px;font:inherit;font-size:1rem;line-height:1.5;outline:none;transition:.25s}
+  textarea:focus{border-color:var(--accent);box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 12%,transparent),0 0 30px color-mix(in srgb,var(--accent) 13%,transparent)}
+  textarea:disabled{opacity:.55}
+  .row{display:flex;gap:10px;margin-top:12px;align-items:center;flex-wrap:wrap}
+  .hint{color:var(--muted);font-size:.8rem;margin-right:auto}
+  kbd{font-family:'JetBrains Mono',monospace;font-size:.72rem;background:var(--panel2);border:1px solid var(--line);
+      border-bottom-width:2px;padding:1px 6px;border-radius:5px}
+  button.btn{font:inherit;font-weight:600;border:0;border-radius:12px;padding:11px 18px;cursor:pointer;transition:.2s}
+  .primary{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#071020}
+  .primary:hover{filter:brightness(1.1);transform:translateY(-1px);box-shadow:0 10px 24px -8px var(--accent)}
+  .ghost{background:var(--panel);color:var(--muted);border:1px solid var(--line)!important}
+  .ghost:hover{color:var(--text)}
+  .hidden{display:none!important}
+
+  .done{text-align:center;padding:40px 20px;background:linear-gradient(160deg,var(--panel2),var(--panel));
+        border:1px solid var(--line);border-radius:22px;animation:enter .6s cubic-bezier(.2,.9,.3,1.2)}
+  .done h2{font-size:2rem;margin-bottom:6px}
+  .done .big{font-family:'JetBrains Mono',monospace;font-size:3.4rem;font-weight:600;
+             background:linear-gradient(120deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .missed{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin:16px 0 22px}
+  .missed span{background:#f8717118;border:1px solid #f8717144;color:#fca5a5;padding:4px 10px;border-radius:99px;font-size:.82rem}
+  footer{color:var(--muted);font-size:.75rem;text-align:center;margin-top:28px}
+  @media (max-width:560px){header{flex-direction:column;align-items:flex-start}.face{padding:22px}.card{min-height:240px}}
+</style>
+</head>
+<body>
+<canvas id="bg"></canvas>
+<canvas id="fx"></canvas>
+
+<div class="wrap">
+  <header>
+    <div>
+      <h1 id="title"></h1>
+      <div class="sub" id="subtitle"></div>
+    </div>
+    <div class="stats">
+      <div class="stat"><b id="sDone">0/0</b><small>Card</small></div>
+      <div class="stat"><b id="sRight">0</b><small>Correct</small></div>
+      <div class="stat streak" id="streakBox"><b id="sStreak">0</b><small>Streak</small></div>
+    </div>
+  </header>
+
+  <div class="chips" id="chips">
+  </div>
+
+  <div class="progress"><i id="bar"></i></div>
+
+  <div id="game">
+    <div class="scene">
+      <div class="card" id="card">
+        <div class="face front">
+          <div class="tag" id="topic"></div>
+          <div class="themes hidden" id="themes"></div>
+          <div class="speaker hidden" id="speaker"></div>
+          <div class="term" id="term"></div>
+          <div class="prompt" id="promptText"></div>
+          <div class="hintline hidden" id="hintline"></div>
+        </div>
+        <div class="face back">
+          <div class="qline"><span class="label">Question</span><b id="termBack"></b><span class="label" id="spBack"></span></div>
+          <div class="verdict">
+            <div class="ring" id="ring"><span id="pct">0%</span></div>
+            <div><h3 id="vTitle">Nice</h3><p id="vSub"></p></div>
+          </div>
+          <div class="label">Answer</div>
+          <div class="answer" id="answer"></div>
+          <div class="alt" id="alt"></div>
+          <div class="label">You wrote</div>
+          <div class="yours" id="yours"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="inputbox">
+      <textarea id="input" placeholder="Type your answer…" autocomplete="off" spellcheck="false"></textarea>
+    </div>
+    <div class="row">
+      <div class="hint" id="hint"><kbd>Enter</kbd> check · <kbd>Shift</kbd>+<kbd>Enter</kbd> new line · <kbd>Alt</kbd>+<kbd>H</kbd> hint</div>
+      <button class="btn ghost" id="hintBtn">💡 First-letter hint</button>
+      <button class="btn ghost" id="skipBtn">I don't know</button>
+      <button class="btn ghost hidden" id="overrideBtn">Count it as correct</button>
+      <button class="btn primary" id="checkBtn">Check</button>
+      <button class="btn primary hidden" id="nextBtn">Next →</button>
+    </div>
+  </div>
+
+  <div id="end" class="hidden"></div>
+
+  <footer>Green = words you got · red = words you missed. The charge sign counts: 2+ and 2- are different. Superscripts aren't needed. Tip: shift-click or press-and-hold the topic tabs to pick several.</footer>
+</div>
+
+<script>
+/* ===== CONFIG: the only part that changes per deck ===== */
+const CONFIG = {
+  title: "Ions &amp; <span>Formulae</span>",
+  subtitle: "Grade 10 · Physical Sciences P2 · type the formula with its charge, e.g. SO42- or SO4 2-",
+  prompt: "Write the formula with its charge.",
+};
+const CARDS = [
+  {"t": "Silver ion", "g": "Metal ions", "a": ["Ag+", "Ag +", "Ag1+", "Ag 1+"], "show": "Ag⁺"},
+  {"t": "Zinc ion", "g": "Metal ions", "a": ["Zn2+", "Zn 2+"], "show": "Zn²⁺"},
+  {"t": "Cadmium ion", "g": "Metal ions", "a": ["Cd2+", "Cd 2+"], "show": "Cd²⁺"},
+  {"t": "Carbonate", "g": "Polyatomic ions", "a": ["CO32-", "CO3 2-"], "show": "CO₃²⁻"},
+  {"t": "Hydroxide", "g": "Polyatomic ions", "a": ["OH-", "OH -", "OH1-", "OH 1-"], "show": "OH⁻"},
+  {"t": "Sulfite", "g": "Polyatomic ions", "a": ["SO32-", "SO3 2-"], "show": "SO₃²⁻"},
+  {"t": "Hydrogen carbonate (bicarbonate)", "g": "Polyatomic ions", "a": ["HCO3-", "HCO3 -", "HCO31-", "HCO3 1-"], "show": "HCO₃⁻"},
+  {"t": "Thiosulfate", "g": "Polyatomic ions", "a": ["S2O32-", "S2O3 2-"], "show": "S₂O₃²⁻"},
+  {"t": "Sulfate", "g": "Polyatomic ions", "a": ["SO42-", "SO4 2-"], "show": "SO₄²⁻"},
+  {"t": "Hydronium", "g": "Polyatomic ions", "a": ["H3O+", "H3O +", "H3O1+", "H3O 1+"], "show": "H₃O⁺"},
+  {"t": "Hydrogen sulphate (bisulphate)", "g": "Polyatomic ions", "a": ["HSO4-", "HSO4 -", "HSO41-", "HSO4 1-"], "show": "HSO₄⁻"},
+  {"t": "Nitrate", "g": "Polyatomic ions", "a": ["NO3-", "NO3 -", "NO31-", "NO3 1-"], "show": "NO₃⁻"},
+  {"t": "Nitrite", "g": "Polyatomic ions", "a": ["NO2-", "NO2 -", "NO21-", "NO2 1-"], "show": "NO₂⁻"},
+  {"t": "Dichromate", "g": "Polyatomic ions", "a": ["Cr2O72-", "Cr2O7 2-"], "show": "Cr₂O₇²⁻"},
+  {"t": "Phosphate", "g": "Polyatomic ions", "a": ["PO43-", "PO4 3-"], "show": "PO₄³⁻"},
+  {"t": "Permanganate", "g": "Polyatomic ions", "a": ["MnO4-", "MnO4 -", "MnO41-", "MnO4 1-"], "show": "MnO₄⁻"},
+  {"t": "Chlorate", "g": "Polyatomic ions", "a": ["ClO3-", "ClO3 -", "ClO31-", "ClO3 1-"], "show": "ClO₃⁻"},
+  {"t": "Ethanoate (acetate)", "g": "Polyatomic ions", "a": ["CH3COO-", "CH3COO -", "CH3COO1-", "CH3COO 1-"], "show": "CH₃COO⁻"},
+  {"t": "Ammonium", "g": "Polyatomic ions", "a": ["NH4+", "NH4 +", "NH41+", "NH4 1+"], "show": "NH₄⁺"},
+  {"t": "Ammonia", "g": "Common compounds", "a": ["NH3"], "show": "NH₃", "p": "Write the formula."},
+  {"t": "Methane", "g": "Common compounds", "a": ["CH4"], "show": "CH₄", "p": "Write the formula."},
+  {"t": "Sulphuric acid", "g": "Acids", "a": ["H2SO4"], "show": "H₂SO₄", "p": "Write the formula."},
+  {"t": "Hydrochloric acid", "g": "Acids", "a": ["HCl(aq)", "HCl"], "show": "HCl(aq)", "p": "Write the formula."},
+  {"t": "Nitric acid", "g": "Acids", "a": ["HNO3"], "show": "HNO₃", "p": "Write the formula."},
+  {"t": "Ethanoic acid (vinegar/acetic acid)", "g": "Acids", "a": ["CH3COOH"], "show": "CH₃COOH", "p": "Write the formula."},
+  {"t": "Oxalic acid", "g": "Acids", "a": ["H2C2O4"], "show": "H₂C₂O₄", "p": "Write the formula."}
+
+];
+const THEME = {
+  fonts:{url:"https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap",
+         body:"'Sora'", display:"'Sora'"},
+  colors:{bg:"#04110f",panel:"#0a1f1c",panel2:"#0f2a26",line:"#1d4a42",text:"#e6fbf5",muted:"#86b3a8",
+          accent:"#b6ff3b",accent2:"#ff9f43",glow1:"#0c3a2f",glow2:"#3a2208"},
+  bg:{kind:"bubbles",colors:["#b6ff3b","#3bffd0","#ff9f43"],count:60},
+  confetti:["#b6ff3b","#ff9f43","#3bffd0","#ffffff","#facc15"],
+};
+/* ===== END CONFIG ===== */
+(function applyTheme(){
+  const r=document.documentElement.style, c=THEME.colors||{};
+  for(const k in c) r.setProperty("--"+k,c[k]);
+  if(THEME.fonts){ r.setProperty("--font",THEME.fonts.body); r.setProperty("--display",THEME.fonts.display);
+    document.querySelector('link[href*="fonts.googleapis.com/css2"]').href=THEME.fonts.url; }
+})();
+
+const SOFT = new Set(["a","an","the"]);
+const norm = w => w.toLowerCase().replace(/[’']/g,"'").replace(/[−–]/g,"-").replace(/\^/g,"").replace(/[^a-z0-9'+\-]/g,"").replace(/'s$/,"s");
+const words = s => s.split(/\s+/).map(w=>({raw:w,n:norm(w)})).filter(w=>w.n);
+
+// LCS over significant words -> which answer words matched, which typed words matched
+function compare(answer, typed){
+  const A = words(answer), T = words(typed);
+  const ai = A.map((w,i)=>i).filter(i=>!SOFT.has(A[i].n));
+  const ti = T.map((w,i)=>i).filter(i=>!SOFT.has(T[i].n));
+  const n=ai.length, m=ti.length, dp=[...Array(n+1)].map(()=>new Array(m+1).fill(0));
+  for(let i=n-1;i>=0;i--)for(let j=m-1;j>=0;j--)
+    dp[i][j] = A[ai[i]].n===T[ti[j]].n ? dp[i+1][j+1]+1 : Math.max(dp[i+1][j],dp[i][j+1]);
+  const hitA=new Set(), hitT=new Set(); let i=0,j=0;
+  while(i<n&&j<m){
+    if(A[ai[i]].n===T[ti[j]].n){hitA.add(ai[i]);hitT.add(ti[j]);i++;j++}
+    else if(dp[i+1][j]>=dp[i][j+1])i++; else j++;
+  }
+  const lcs=dp[0][0];
+  const recall = n? lcs/n : 0, precision = m? lcs/m : 0;
+  const score = Math.round(100 * (0.85*recall + 0.15*precision));
+  return {A,T,hitA,hitT,score,recall};
+}
+
+// ---------- state ----------
+let deck=[], idx=0, right=0, streak=0, missed=[], phase="ask", filter=new Set();   // filter = selected groups, empty = all
+const $ = id=>document.getElementById(id);
+const card=$("card"), input=$("input");
+
+function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.random()*(i+1)|0;[a[i],a[j]]=[a[j],a[i]]}return a}
+function start(list){
+  deck = shuffle([...list]); idx=0; right=0; streak=0; missed=[];
+  $("game").classList.remove("hidden"); $("end").classList.add("hidden");
+  show(); updateStats();
+}
+function updateStats(){
+  $("sDone").textContent = `${Math.min(idx+1,deck.length)}/${deck.length}`;
+  $("sRight").textContent = right; $("sStreak").textContent = streak;
+  $("bar").style.width = (idx/deck.length*100)+"%";
+}
+function show(){
+  const c=deck[idx];
+  phase="ask";
+  card.classList.remove("flipped","leave");
+  $("topic").textContent=c.g||""; $("topic").classList.toggle("hidden",!c.g); $("themes").textContent=c.th||""; $("themes").classList.toggle("hidden",!c.th); $("speaker").textContent=c.sp?"Said by "+c.sp:""; $("speaker").classList.toggle("hidden",!c.sp); $("term").textContent=c.t; $("termBack").textContent=c.t; $("spBack").textContent=c.sp?"· "+c.sp:""; $("term").style.fontSize=c.t.length>70?"1.45rem":c.t.length>35?"1.9rem":""; $("termBack").style.fontSize=c.t.length>70?"1.05rem":""; $("promptText").textContent=c.p||CONFIG.prompt||"";
+  input.value=""; input.disabled=false;
+  toggle(["checkBtn","skipBtn","hintBtn"],true); usedHint=false; $("hintline").classList.add("hidden"); $("hintline").innerHTML=""; toggle(["nextBtn","overrideBtn"],false);
+  $("hint").innerHTML='<kbd>Enter</kbd> check · <kbd>Shift</kbd>+<kbd>Enter</kbd> new line · <kbd>Alt</kbd>+<kbd>H</kbd> hint';
+  void card.offsetWidth; card.classList.add("enter");
+  setTimeout(()=>card.classList.remove("enter"),600);
+  setTimeout(()=>input.focus(),50);
+  updateStats();
+}
+function toggle(ids,on){ids.forEach(id=>$(id).classList.toggle("hidden",!on))}
+
+function check(skip=false){
+  if(phase!=="ask")return;
+  const c=deck[idx], typed=skip?"":input.value.trim();
+  if(!skip && !typed){card.classList.add("shake");setTimeout(()=>card.classList.remove("shake"),500);return}
+  phase="shown";
+  // best matching accepted answer
+  let best=null, bestI=0;
+  c.a.forEach((ans,i)=>{const r=compare(ans,typed); if(!best||r.score>best.score){best=r;bestI=i}});
+  const s=best.score;
+  const level = s>=90?"good": s>=65?"close":"bad";
+  const col = {good:"var(--good)",close:"var(--close)",bad:"var(--bad)"}[level];
+
+  // render answer words
+  $("answer").innerHTML = best.A.map((w,i)=>{
+    const cls = SOFT.has(w.n)?"soft": best.hitA.has(i)?"hit":"miss";
+    return `<span class="w ${cls}" style="animation-delay:${.35+i*.04}s">${esc(w.raw)}</span>`;
+  }).join("");
+  const others=c.a.filter((_,i)=>i!==bestI);
+  $("alt").textContent = c.show ? `Written properly: ${c.show}` : others.length ? `Also accepted: ${others.join(" / ")}` : "";
+  $("yours").innerHTML = typed ? best.T.map((w,i)=>
+      SOFT.has(w.n)||best.hitT.has(i)?esc(w.raw):`<span class="extra">${esc(w.raw)}</span>`).join(" ")
+    : "<em style='color:var(--muted)'>(skipped)</em>";
+
+  const ring=$("ring"); ring.style.setProperty("--c",col); ring.style.setProperty("--p",0);
+  $("pct").textContent="0%";
+  requestAnimationFrame(()=>requestAnimationFrame(()=>ring.style.setProperty("--p",s)));
+  countUp($("pct"),s);
+
+  const titles={good:["Spot on!","Word perfect.","Nailed it."],close:["Almost there","So close","Nearly"],bad:["Not yet","Keep at it","Learn this one"]};
+  $("vTitle").textContent = skip?"Here it is": pick(titles[level]);
+  $("vTitle").style.color = col;
+  const missing=[...best.A.keys()].filter(i=>!SOFT.has(best.A[i].n)&&!best.hitA.has(i)).length;
+  $("vSub").textContent = skip?"Have a read, it'll come back later.":
+    level==="good"? (missing?`Missed ${missing} word${missing>1?"s":""}, close enough.`:"Every key word.") :
+    `${missing} key word${missing!==1?"s":""} missing.`;
+  if(usedHint && !skip) $("vSub").textContent += " (used a hint)";
+
+  card.classList.add("flipped");
+  input.disabled=true;
+  toggle(["checkBtn","skipBtn","hintBtn"],false); toggle(["nextBtn"],true);
+  toggle(["overrideBtn"], level!=="good" && !skip);
+  $("hint").innerHTML='<kbd>Enter</kbd> next card';
+
+  if(level==="good"){ mark(true); setTimeout(()=>burst(),450); }
+  else { mark(false); setTimeout(()=>{card.classList.add("shake");setTimeout(()=>card.classList.remove("shake"),500)},800); }
+  setTimeout(()=>$("nextBtn").focus(),100);
+}
+let lastCorrect=null;
+function mark(ok){
+  lastCorrect=ok;
+  if(ok){right++;streak++;bumpStreak()} else {streak=0;missed.push(deck[idx])}
+  updateStats();
+}
+function override(){
+  if(lastCorrect)return;
+  missed.pop(); right++; streak++; lastCorrect=true; bumpStreak(); updateStats();
+  $("vTitle").textContent="Counted as correct"; $("vTitle").style.color="var(--good)";
+  toggle(["overrideBtn"],false); burst();
+}
+function bumpStreak(){const b=$("streakBox");b.classList.remove("bump");void b.offsetWidth;b.classList.add("bump")}
+function next(){
+  if(phase!=="shown")return;
+  phase="moving";
+  card.classList.add("leave");
+  setTimeout(()=>{ idx++; if(idx>=deck.length) finish(); else show(); },340);
+}
+function finish(){
+  $("bar").style.width="100%";
+  $("game").classList.add("hidden");
+  const pct=Math.round(right/deck.length*100);
+  const end=$("end"); end.classList.remove("hidden");
+  end.innerHTML=`<div class="done">
+    <h2>${pct===100?"Perfect round!":pct>=75?"Great round":"Round done"}</h2>
+    <div class="big">${right}/${deck.length}</div>
+    ${missed.length?`<p style="color:var(--muted);margin-top:10px">Still to learn:</p>
+      <div class="missed">${missed.map(c=>`<span>${esc(c.t)}</span>`).join("")}</div>`:"<p style='color:var(--muted);margin:10px 0 22px'>You got every one.</p>"}
+    <div class="row" style="justify-content:center">
+      ${missed.length?`<button class="btn primary" id="redoMissed">Redo the ${missed.length} I missed</button>`:""}
+      <button class="btn ghost" id="redoAll">Start over</button>
+    </div></div>`;
+  const m=[...missed];
+  if(m.length)$("redoMissed").onclick=()=>start(m);
+  $("redoAll").onclick=()=>start(current());
+  if(pct>=75){burst(innerWidth/2,innerHeight/3,140);setTimeout(()=>burst(innerWidth/3,innerHeight/2,90),250);setTimeout(()=>burst(innerWidth*2/3,innerHeight/2,90),450)}
+}
+function current(){return filter.size?CARDS.filter(c=>filter.has(c.g)):CARDS}
+const pick=a=>a[Math.random()*a.length|0];
+const esc=s=>s.replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+function countUp(el,to){const t0=performance.now();(function f(t){const k=Math.min(1,(t-t0)/1000);el.textContent=Math.round(to*(1-Math.pow(1-k,3)))+"%";if(k<1)requestAnimationFrame(f)})(t0)}
+
+let usedHint=false;
+function showHint(){
+  if(phase!=="ask"||usedHint)return;
+  usedHint=true;
+  const ans=deck[idx].a[0];
+  $("hintline").innerHTML = ans.split(/\s+/).map((w,i)=>{
+    const m=w.match(/^([A-Za-z0-9])(.*?)([.,;:]?)$/);
+    const body = m ? esc(m[1])+"<i>"+m[2].replace(/[A-Za-z0-9]/g,"_")+"</i>"+esc(m[3]) : esc(w);
+    return `<span class="w" style="animation-delay:${i*.05}s">${body}</span>`;
+  }).join("");
+  $("hintline").classList.remove("hidden");
+  toggle(["hintBtn"],false);
+  input.focus();
+}
+// ---------- events ----------
+$("hintBtn").onclick=showHint;
+document.addEventListener("keydown",e=>{if(e.altKey&&(e.code==="KeyH")){e.preventDefault();showHint()}});
+$("checkBtn").onclick=()=>check();
+$("skipBtn").onclick=()=>check(true);
+$("nextBtn").onclick=next;
+$("overrideBtn").onclick=override;
+input.addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();e.stopPropagation();check()}});
+document.addEventListener("keydown",e=>{if(e.key==="Enter"&&phase==="shown"&&document.activeElement!==$("overrideBtn")){e.preventDefault();next()}});
+document.title = CONFIG.title.replace(/<[^>]+>/g,"");
+$("title").innerHTML = CONFIG.title; $("subtitle").textContent = CONFIG.subtitle||"";
+(function buildChips(){
+  const groups=[...new Set(CARDS.map(c=>c.g).filter(Boolean))];
+  const chips=[["all",`All (${CARDS.length})`],...(groups.length>1?groups.map(g=>[g,g]):[])];
+  $("chips").innerHTML=chips.map(([v,l],i)=>`<button class="chip${i?"":" on"}" data-set="${esc(v)}">${esc(l)}</button>`).join("");
+  if(chips.length<2)$("chips").classList.add("hidden");
+})();
+// click = just that topic · shift/ctrl/cmd-click or press-and-hold = add/remove it from a multi-selection
+function pickChip(b,multi){
+  const v=b.dataset.set;
+  if(v==="all") filter.clear();
+  else if(multi){ filter.has(v)?filter.delete(v):filter.add(v); }
+  else { filter.clear(); filter.add(v); }
+  document.querySelectorAll(".chip").forEach(x=>x.classList.toggle("on", x.dataset.set==="all"? !filter.size : filter.has(x.dataset.set)));
+  start(current());
+}
+let holdT=null, held=false;
+$("chips").addEventListener("pointerdown",e=>{const b=e.target.closest(".chip"); if(!b)return; held=false; holdT=setTimeout(()=>{held=true;pickChip(b,true)},450)});
+["pointerup","pointerleave","pointercancel"].forEach(ev=>$("chips").addEventListener(ev,()=>clearTimeout(holdT)));
+$("chips").addEventListener("click",e=>{
+  const b=e.target.closest(".chip"); if(!b)return;
+  if(held){held=false;return}
+  pickChip(b,e.shiftKey||e.ctrlKey||e.metaKey);
+});
+
+// ---------- background: themed drifting particles (THEME.bg.kind) ----------
+const bg=$("bg"), bx=bg.getContext("2d"); let bits=[];
+const BG=THEME.bg||{kind:"arrows"}, BGC=BG.colors||[THEME.colors.accent,THEME.colors.accent2];
+function sizeBg(){bg.width=fx.width=innerWidth*devicePixelRatio;bg.height=fx.height=innerHeight*devicePixelRatio;
+  bx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);fxx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0)}
+function mkBit(){
+  const r=Math.random, k=BG.kind, a=r()*6.28;
+  const b={x:r()*innerWidth,y:r()*innerHeight,col:BGC[r()*BGC.length|0],al:.15+r()*.3,ph:r()*6.28,sz:1.5+r()*3.5,vx:0,vy:0,len:0,ch:""};
+  if(k==="arrows"){const s=.15+r()*.35;b.vx=Math.cos(a)*s;b.vy=Math.sin(a)*s;b.len=10+r()*26}
+  else if(k==="embers"||k==="bubbles"){b.al=.3+r()*.45;b.vx=(r()-.5)*.35;b.vy=-(.2+r()*.6);b.sz=k==="bubbles"?3+r()*9:1.2+r()*2.8}
+  else if(k==="falling"){b.vx=(r()-.5)*.3;b.vy=.25+r()*.6;b.sz=1.5+r()*3}
+  else if(k==="symbols"){b.vx=(r()-.5)*.25;b.vy=-(.1+r()*.3);b.sz=14+r()*18;b.ch=BG.chars[r()*BG.chars.length|0]}
+  return b;   // "stars" = no velocity, just twinkles
+}
+function drawBg(t){
+  bx.clearRect(0,0,innerWidth,innerHeight);
+  const k=BG.kind;
+  for(const p of bits){
+    p.x+=p.vx;p.y+=p.vy;
+    if(p.x<-40)p.x=innerWidth+40; if(p.x>innerWidth+40)p.x=-40;
+    if(p.y<-40)p.y=innerHeight+40; if(p.y>innerHeight+40)p.y=-40;
+    bx.globalAlpha=p.al*(k==="arrows"?1:.55+.45*Math.sin(t/700+p.ph));bx.strokeStyle=bx.fillStyle=p.col;bx.shadowBlur=0;
+    if(k==="arrows"){
+      const ang=Math.atan2(p.vy,p.vx), ex=p.x+Math.cos(ang)*p.len, ey=p.y+Math.sin(ang)*p.len;
+      bx.lineWidth=1.4;bx.beginPath();bx.moveTo(p.x,p.y);bx.lineTo(ex,ey);
+      bx.lineTo(ex-Math.cos(ang-.5)*6,ey-Math.sin(ang-.5)*6);bx.moveTo(ex,ey);
+      bx.lineTo(ex-Math.cos(ang+.5)*6,ey-Math.sin(ang+.5)*6);bx.stroke();
+    }else if(k==="bubbles"){bx.lineWidth=1.2;bx.beginPath();bx.arc(p.x,p.y,p.sz,0,6.28);bx.stroke()}
+    else if(k==="symbols"){bx.font=p.sz+"px "+THEME.fonts.display+",serif";bx.fillText(p.ch,p.x,p.y)}
+    else{bx.shadowColor=p.col;bx.shadowBlur=k==="embers"?10:4;bx.beginPath();bx.arc(p.x,p.y,p.sz,0,6.28);bx.fill()}
+  }
+  bx.globalAlpha=1;bx.shadowBlur=0;
+  requestAnimationFrame(drawBg);
+}
+
+// ---------- fx: spark burst ----------
+const fx=$("fx"), fxx=fx.getContext("2d"); let parts=[], fxRunning=false;
+function burst(x,y,n=70){
+  const r=card.getBoundingClientRect(); x??=r.left+r.width/2; y??=r.top+r.height/2;
+  const cols=THEME.confetti||[THEME.colors.accent,THEME.colors.accent2,"#ffffff"];
+  for(let i=0;i<n;i++){const a=Math.random()*Math.PI*2,s=3+Math.random()*7;
+    parts.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s-2,life:1,c:pick(cols),sz:2+Math.random()*3,rot:Math.random()*6,vr:(Math.random()-.5)*.3})}
+  if(!fxRunning){fxRunning=true;requestAnimationFrame(tick)}
+}
+function tick(){
+  fxx.clearRect(0,0,innerWidth,innerHeight);
+  parts=parts.filter(p=>p.life>0);
+  for(const p of parts){p.vy+=.18;p.vx*=.985;p.x+=p.vx;p.y+=p.vy;p.life-=.012;p.rot+=p.vr;
+    fxx.save();fxx.globalAlpha=Math.max(0,p.life);fxx.fillStyle=p.c;fxx.translate(p.x,p.y);fxx.rotate(p.rot);
+    fxx.fillRect(-p.sz,-p.sz/2,p.sz*2,p.sz);fxx.restore()}
+  if(parts.length)requestAnimationFrame(tick); else {fxRunning=false;fxx.clearRect(0,0,innerWidth,innerHeight)}
+}
+
+addEventListener("resize",sizeBg);
+sizeBg(); bits=Array.from({length:Math.min(BG.count||70,innerWidth/18|0)},mkBit); requestAnimationFrame(drawBg);
+start(CARDS);
+</script>
+</body>
+</html>
